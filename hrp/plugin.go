@@ -13,6 +13,7 @@ import (
 
 	"github.com/httprunner/httprunner/v4/hrp/internal/code"
 	"github.com/httprunner/httprunner/v4/hrp/internal/env"
+	"github.com/httprunner/httprunner/v4/hrp/internal/sdk"
 )
 
 const (
@@ -34,7 +35,7 @@ var (
 func initPlugin(path, venv string, logOn bool) (plugin funplugin.IPlugin, err error) {
 	// plugin file not found
 	if path == "" {
-		return nil, nil
+		return nil, errors.New("plugin file not found")
 	}
 	pluginPath, err := locatePlugin(path)
 	if err != nil {
@@ -52,6 +53,8 @@ func initPlugin(path, venv string, logOn bool) (plugin funplugin.IPlugin, err er
 
 	pluginOptions := []funplugin.Option{funplugin.WithDebugLogger(logOn)}
 
+	initPluginPath := pluginPath
+
 	if strings.HasSuffix(pluginPath, ".py") {
 		// register funppy plugin
 		genPyPluginPath := filepath.Join(filepath.Dir(pluginPath), PluginPySourceGenFile)
@@ -60,7 +63,7 @@ func initPlugin(path, venv string, logOn bool) (plugin funplugin.IPlugin, err er
 			log.Error().Err(err).Str("path", pluginPath).Msg("build plugin failed")
 			return nil, err
 		}
-		pluginPath = genPyPluginPath
+		initPluginPath = genPyPluginPath
 
 		packages := []string{"funppy"}
 		python3, err := myexec.EnsurePython3Venv(venv, packages...)
@@ -74,7 +77,7 @@ func initPlugin(path, venv string, logOn bool) (plugin funplugin.IPlugin, err er
 	}
 
 	// found plugin file
-	plugin, err = funplugin.Init(pluginPath, pluginOptions...)
+	plugin, err = funplugin.Init(initPluginPath, pluginOptions...)
 	if err != nil {
 		log.Error().Err(err).Msgf("init plugin failed: %s", pluginPath)
 		err = errors.Wrap(code.InitPluginFailed, err.Error())
@@ -92,7 +95,7 @@ func initPlugin(path, venv string, logOn bool) (plugin funplugin.IPlugin, err er
 	if err != nil {
 		params["result"] = "failed"
 	}
-	// go sdk.SendGA4Event("init_plugin", params)
+	go sdk.SendGA4Event("init_plugin", params)
 
 	return
 }

@@ -116,18 +116,18 @@ func (b *HRPBoomer) Run(testcases ...ITestCase) {
 
 func (b *HRPBoomer) ConvertTestCasesToBoomerTasks(testcases ...ITestCase) (taskSlice []*boomer.Task) {
 	// load all testcases
-	testCases, err := LoadTestCases(testcases...)
+	_, err := LoadTestCases(testcases...)
 	if err != nil {
 		log.Error().Err(err).Msg("failed to load testcases")
 		os.Exit(code.GetErrorCode(err))
 	}
 
-	for _, testcase := range testCases {
-		rendezvousList := initRendezvous(testcase, int64(b.GetSpawnCount()))
-		task := b.convertBoomerTask(testcase, rendezvousList)
-		taskSlice = append(taskSlice, task)
-		waitRendezvous(rendezvousList, b)
-	}
+	// for _, testcase := range testCases {
+	// 	rendezvousList := initRendezvous(testcase, int64(b.GetSpawnCount()))
+	// 	task := b.convertBoomerTask(testcase, rendezvousList)
+	// 	taskSlice = append(taskSlice, task)
+	// 	waitRendezvous(rendezvousList, b)
+	// }
 	return taskSlice
 }
 
@@ -149,8 +149,8 @@ func (b *HRPBoomer) ParseTestCases(testCases []*TestCase) []*TCase {
 }
 
 func (b *HRPBoomer) TestCasesToBytes(testcases ...ITestCase) []byte {
-	// load all testcases
-	testCases, err := LoadTestCases(testcases...)
+	// load all testcases TODO-lyd
+	/* testCases, err := LoadTestCases(testcases...)
 	if err != nil {
 		log.Error().Err(err).Msg("failed to load testcases")
 		os.Exit(code.GetErrorCode(err))
@@ -161,7 +161,8 @@ func (b *HRPBoomer) TestCasesToBytes(testcases ...ITestCase) []byte {
 		log.Error().Err(err).Msg("failed to marshal testcases")
 		return nil
 	}
-	return testCasesBytes
+	return testCasesBytes */
+	return []byte{}
 }
 
 func (b *HRPBoomer) BytesToTCases(testCasesBytes []byte) []*TCase {

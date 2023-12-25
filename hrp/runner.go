@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -194,25 +195,28 @@ func (r *HRPRunner) GenHTMLReport() *HRPRunner {
 func (r *HRPRunner) Run(testcases ...ITestCase) (err error) {
 	log.Info().Str("hrp_version", version.VERSION).Msg("start running")
 
-	/* startTime := time.Now()
+	startTime := time.Now()
 	defer func() {
 		// report run event
 		sdk.SendGA4Event("hrp_run", map[string]interface{}{
 			"success":              err == nil,
 			"engagement_time_msec": time.Since(startTime).Milliseconds(),
 		})
-	}() */
+	}()
 
 	// record execution data to summary
 	s := newOutSummary()
 
 	// load all testcases
-	testCases, err := LoadTestCases(testcases...)
+	testCasesList, err := LoadTestCases(testcases...)
 	if err != nil {
 		log.Error().Err(err).Msg("failed to load testcases")
 		return err
 	}
 
+	// for _, v := range testCases {
+
+	// }
 	// quit all plugins
 	defer func() {
 		pluginMap.Range(func(key, value interface{}) bool {
@@ -225,46 +229,57 @@ func (r *HRPRunner) Run(testcases ...ITestCase) (err error) {
 
 	var runErr error
 	// run testcase one by one
-	for _, testcase := range testCases {
-		// each testcase has its own case runner
-		caseRunner, err := r.NewCaseRunner(testcase)
-		if err != nil {
-			log.Error().Err(err).Msg("[Run] init case runner failed")
-			return err
-		}
+	var wg sync.WaitGroup
+	for _, testCases := range testCasesList {
+		wg.Add(1)
+		go func(testCases []*TestCase) error {
+			defer wg.Done()
+			for _, testcase := range testCases {
+				// each testcase has its own case runner
+				caseRunner, err := r.NewCaseRunner(testcase)
+				if err != nil {
+					log.Error().Err(err).Msg("[Run] init case runner failed")
+					return err
+				}
 
-		// release UI driver session
-		defer func() {
-			for _, client := range caseRunner.uiClients {
-				client.Driver.DeleteSession()
-			}
-		}()
+				// release UI driver session
+				defer func() {
+					for _, client := range caseRunner.uiClients {
+						client.Driver.DeleteSession()
+					}
+				}()
 
-		for it := caseRunner.parametersIterator; it.HasNext(); {
-			// case runner can run multiple times with different parameters
-			// each run has its own session runner
-			sessionRunner := caseRunner.NewSession()
-			err1 := sessionRunner.Start(it.Next())
-			if err1 != nil {
-				log.Error().Err(err1).Msg("[Run] run testcase failed")
-				runErr = err1
-			}
-			caseSummary, err2 := sessionRunner.GetSummary()
-			s.appendCaseSummary(caseSummary)
-			if err2 != nil {
-				log.Error().Err(err2).Msg("[Run] get summary failed")
-				if err1 != nil {
-					runErr = errors.Wrap(err1, err2.Error())
-				} else {
-					runErr = err2
+				for it := caseRunner.parametersIterator; it.HasNext(); {
+					// case runner can run multiple times with different parameters
+					// each run has its own session runner
+					sessionRunner := caseRunner.NewSession()
+					err1 := sessionRunner.Start(it.Next())
+					if err1 != nil {
+						log.Error().Err(err1).Msg("[Run] run testcase failed")
+						runErr = err1
+					}
+					caseSummary, err2 := sessionRunner.GetSummary()
+					s.appendCaseSummary(caseSummary)
+					if err2 != nil {
+						log.Error().Err(err2).Msg("[Run] get summary failed")
+						if err1 != nil {
+							runErr = errors.Wrap(err1, err2.Error())
+						} else {
+							runErr = err2
+						}
+					}
+
+					if runErr != nil && r.failfast {
+						break
+					}
 				}
 			}
-
-			if runErr != nil && r.failfast {
-				break
-			}
-		}
+			return nil
+		}(testCases)
 	}
+
+	wg.Wait()
+
 	s.Time.Duration = time.Since(s.Time.StartAt).Seconds()
 
 	// save summary
