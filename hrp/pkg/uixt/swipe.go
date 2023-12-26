@@ -133,7 +133,10 @@ func (dExt *DriverExt) swipeToTapTexts(texts []string, options ...ActionOption) 
 		return errors.New("no text to tap")
 	}
 
-	options = append(options, WithMatchOne(true))
+	options = append(options, WithMatchOne(true), WithRegex(true))
+	actionOptions := NewActionOptions(options...)
+	actionOptions.Identifier = ""
+	optionsWithoutIdentifier := actionOptions.Options()
 	var point PointF
 	findTexts := func(d *DriverExt) error {
 		var err error
@@ -145,7 +148,7 @@ func (dExt *DriverExt) swipeToTapTexts(texts []string, options ...ActionOption) 
 		if err != nil {
 			return err
 		}
-		points, err := screenResult.Texts.FindTexts(texts, dExt.ParseActionOptions(options...)...)
+		points, err := screenResult.Texts.FindTexts(texts, dExt.ParseActionOptions(optionsWithoutIdentifier...)...)
 		if err != nil {
 			log.Error().Err(err).Msg("swipeToTapTexts failed")
 			// target texts not found, try to auto handle popup
@@ -165,8 +168,8 @@ func (dExt *DriverExt) swipeToTapTexts(texts []string, options ...ActionOption) 
 		return d.TapAbsXY(point.X, point.Y, options...)
 	}
 
-	findAction := dExt.prepareSwipeAction(options...)
-	return dExt.LoopUntil(findAction, findTexts, foundTextAction, options...)
+	findAction := dExt.prepareSwipeAction(optionsWithoutIdentifier...)
+	return dExt.LoopUntil(findAction, findTexts, foundTextAction, optionsWithoutIdentifier...)
 }
 
 func (dExt *DriverExt) swipeToTapApp(appName string, options ...ActionOption) error {
@@ -181,7 +184,6 @@ func (dExt *DriverExt) swipeToTapApp(appName string, options ...ActionOption) er
 	}
 
 	options = append(options, WithDirection("left"))
-	options = append(options, WithRegex(true))
 
 	actionOptions := NewActionOptions(options...)
 	// default to retry 5 times
@@ -190,7 +192,7 @@ func (dExt *DriverExt) swipeToTapApp(appName string, options ...ActionOption) er
 	}
 	// tap app icon above the text
 	if len(actionOptions.Offset) == 0 {
-		options = append(options, WithOffset(0, -25))
+		options = append(options, WithTapOffset(0, -25))
 	}
 	// set default swipe interval to 1 second
 	if builtin.IsZeroFloat64(actionOptions.Interval) {
