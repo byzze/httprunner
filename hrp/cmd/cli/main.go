@@ -5,11 +5,14 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/panjf2000/ants"
 
 	"github.com/httprunner/httprunner/v4/hrp/cmd"
 )
 
 func main() {
+	defer ants.Release()
+
 	defer func() {
 		if err := recover(); err != nil {
 			// report panic to sentry

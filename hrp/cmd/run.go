@@ -35,6 +35,7 @@ var (
 	saveTests         bool
 	genHTMLReport     bool
 	caseTimeout       float32
+	parallelism       int32
 )
 
 func init() {
@@ -47,13 +48,15 @@ func init() {
 	runCmd.Flags().BoolVarP(&saveTests, "save-tests", "s", false, "save tests summary")
 	runCmd.Flags().BoolVarP(&genHTMLReport, "gen-html-report", "g", false, "generate html report")
 	runCmd.Flags().Float32Var(&caseTimeout, "case-timeout", 3600, "set testcase timeout (seconds)")
+	runCmd.Flags().Int32VarP(&parallelism, "parallelism", "P", 1, "'-P' set testcase parallelism (goroutines)")
 }
 
 func makeHRPRunner() *hrp.HRPRunner {
 	runner := hrp.NewRunner(nil).
 		SetFailfast(!continueOnFailure).
 		SetSaveTests(saveTests).
-		SetCaseTimeout(caseTimeout)
+		SetCaseTimeout(caseTimeout).
+		SetParallelism(parallelism)
 	if genHTMLReport {
 		runner.GenHTMLReport()
 	}

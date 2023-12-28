@@ -149,8 +149,8 @@ func (b *HRPBoomer) ParseTestCases(testCases []*TestCase) []*TCase {
 }
 
 func (b *HRPBoomer) TestCasesToBytes(testcases ...ITestCase) []byte {
-	// load all testcases TODO-lyd
-	/* testCases, err := LoadTestCases(testcases...)
+	// load all testcases
+	testCases, err := LoadTestCases(testcases...)
 	if err != nil {
 		log.Error().Err(err).Msg("failed to load testcases")
 		os.Exit(code.GetErrorCode(err))
@@ -161,8 +161,7 @@ func (b *HRPBoomer) TestCasesToBytes(testcases ...ITestCase) []byte {
 		log.Error().Err(err).Msg("failed to marshal testcases")
 		return nil
 	}
-	return testCasesBytes */
-	return []byte{}
+	return testCasesBytes
 }
 
 func (b *HRPBoomer) BytesToTCases(testCasesBytes []byte) []*TCase {

@@ -4,6 +4,8 @@ import (
 	_ "embed"
 	"os"
 
+	"github.com/httprunner/funplugin/myexec"
+	"github.com/httprunner/httprunner/v4/hrp"
 	"github.com/rs/zerolog/log"
 )
 
@@ -11,7 +13,7 @@ func convert2GoTestScripts(paths ...string) error {
 	log.Warn().Msg("convert to gotest scripts is not supported yet")
 	os.Exit(1)
 
-	/* // TODO TODO-lyd
+	// TODO
 	var testCasePaths []hrp.ITestCase
 	for _, path := range paths {
 		testCasePath := hrp.TestCasePath(path)
@@ -45,8 +47,7 @@ func convert2GoTestScripts(paths ...string) error {
 	}
 
 	// format pytest scripts with black
-	return myexec.ExecPython3Command("black", pytestPaths...) */
-	return nil
+	return myexec.ExecPython3Command("black", pytestPaths...)
 }
 
 //go:embed testcase.tmpl

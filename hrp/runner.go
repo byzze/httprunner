@@ -20,6 +20,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/httprunner/funplugin"
 	"github.com/jinzhu/copier"
+	"github.com/panjf2000/ants"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/net/http2"
@@ -82,6 +83,7 @@ type HRPRunner struct {
 	venv             string
 	saveTests        bool
 	genHTMLReport    bool
+	parallelism      int32
 	httpClient       *http.Client
 	http2Client      *http.Client
 	wsDialer         *websocket.Dialer
@@ -191,6 +193,13 @@ func (r *HRPRunner) GenHTMLReport() *HRPRunner {
 	return r
 }
 
+// GenHTMLReport configures whether to gen html report of api tests.
+func (r *HRPRunner) SetParallelism(parallelism int32) *HRPRunner {
+	log.Info().Int32("parallelism", parallelism).Msg("[init] SetParallelism")
+	r.parallelism = parallelism
+	return r
+}
+
 // Run starts to execute one or multiple testcases.
 func (r *HRPRunner) Run(testcases ...ITestCase) (err error) {
 	log.Info().Str("hrp_version", version.VERSION).Msg("start running")
@@ -207,16 +216,102 @@ func (r *HRPRunner) Run(testcases ...ITestCase) (err error) {
 	// record execution data to summary
 	s := newOutSummary()
 
+	var runErr error
+
 	// load all testcases
-	testCasesList, err := LoadTestCases(testcases...)
+	/* testCasesList, err := LoadTestCases(testcases...)
+	if err != nil {
+		log.Error().Err(err).Msg("failed to load testcases")
+		return err
+	}
+	*/
+
+	//========================== support parallelism goroutine
+	// load all testcases
+	dirList, dirMap, err := LoadTestCasesPaths(testcases...)
 	if err != nil {
 		log.Error().Err(err).Msg("failed to load testcases")
 		return err
 	}
 
-	// for _, v := range testCases {
+	splitDirList := splitDirList(dirList, int(r.parallelism))
 
-	// }
+	var testCasesList = make([][]*TestCase, 0)
+	var count int
+
+	for _, dl := range splitDirList {
+		var testCasesC []*TestCase
+
+		for _, dirName := range dl {
+			paths := dirMap[dirName]
+			tc, err := convertCaseProcess(paths)
+			if err != nil {
+				return err
+			}
+			testCasesC = append(testCasesC, tc...)
+		}
+		count += len(testCasesC)
+		testCasesList = append(testCasesList, testCasesC)
+	}
+
+	log.Info().Int("count", count).Msg("load testcases successfully")
+
+	var wg sync.WaitGroup
+
+	var testCasesSummary = make([][]*TestCaseSummary, len(testCasesList))
+
+	var processTeseCase = func(idx int, testCases []*TestCase) error {
+
+		var runTimeErr error
+		var caseSummaryList = make([]*TestCaseSummary, 0)
+
+		for _, testcase := range testCases {
+			// each testcase has its own case runner
+			caseRunner, err := r.NewCaseRunner(testcase)
+			if err != nil {
+				log.Error().Err(err).Msg("[Run] init case runner failed")
+				return err
+			}
+
+			// release UI driver session
+			defer func() {
+				for _, client := range caseRunner.uiClients {
+					client.Driver.DeleteSession()
+				}
+			}()
+
+			for it := caseRunner.parametersIterator; it.HasNext(); {
+				// case runner can run multiple times with different parameters
+				// each run has its own session runner
+				sessionRunner := caseRunner.NewSession()
+				err1 := sessionRunner.Start(it.Next())
+				if err1 != nil {
+					log.Error().Err(err1).Msg("[Run] run testcase failed")
+					runTimeErr = err1
+				}
+				caseSummary, err2 := sessionRunner.GetSummary()
+				// s.appendCaseSummary(caseSummary)
+				caseSummaryList = append(caseSummaryList, caseSummary)
+				if err2 != nil {
+					log.Error().Err(err2).Msg("[Run] get summary failed")
+					if err1 != nil {
+						runTimeErr = errors.Wrap(err1, err2.Error())
+					} else {
+						runTimeErr = err2
+					}
+				}
+
+				if runTimeErr != nil && r.failfast {
+					break
+				}
+			}
+		}
+
+		testCasesSummary[idx] = append(testCasesSummary[idx], caseSummaryList...)
+		return nil
+	}
+	//==========================
+
 	// quit all plugins
 	defer func() {
 		pluginMap.Range(func(key, value interface{}) bool {
@@ -227,58 +322,23 @@ func (r *HRPRunner) Run(testcases ...ITestCase) (err error) {
 		})
 	}()
 
-	var runErr error
-	// run testcase one by one
-	var wg sync.WaitGroup
-	for _, testCases := range testCasesList {
+	for i, testCases := range testCasesList {
 		wg.Add(1)
-		go func(testCases []*TestCase) error {
-			defer wg.Done()
-			for _, testcase := range testCases {
-				// each testcase has its own case runner
-				caseRunner, err := r.NewCaseRunner(testcase)
-				if err != nil {
-					log.Error().Err(err).Msg("[Run] init case runner failed")
-					return err
-				}
-
-				// release UI driver session
-				defer func() {
-					for _, client := range caseRunner.uiClients {
-						client.Driver.DeleteSession()
-					}
-				}()
-
-				for it := caseRunner.parametersIterator; it.HasNext(); {
-					// case runner can run multiple times with different parameters
-					// each run has its own session runner
-					sessionRunner := caseRunner.NewSession()
-					err1 := sessionRunner.Start(it.Next())
-					if err1 != nil {
-						log.Error().Err(err1).Msg("[Run] run testcase failed")
-						runErr = err1
-					}
-					caseSummary, err2 := sessionRunner.GetSummary()
-					s.appendCaseSummary(caseSummary)
-					if err2 != nil {
-						log.Error().Err(err2).Msg("[Run] get summary failed")
-						if err1 != nil {
-							runErr = errors.Wrap(err1, err2.Error())
-						} else {
-							runErr = err2
-						}
-					}
-
-					if runErr != nil && r.failfast {
-						break
-					}
-				}
-			}
-			return nil
-		}(testCases)
+		idx := i
+		tc := testCases
+		ants.Submit(func() {
+			processTeseCase(idx, tc)
+			wg.Done()
+		})
 	}
 
 	wg.Wait()
+
+	for i := range testCasesSummary {
+		for _, caseSummary := range testCasesSummary[i] {
+			s.appendCaseSummary(caseSummary)
+		}
+	}
 
 	s.Time.Duration = time.Since(s.Time.StartAt).Seconds()
 
@@ -631,6 +691,7 @@ func (r *SessionRunner) Start(givenVars map[string]interface{}) error {
 			// failed
 			log.Error().Err(err).Str("step", stepName).
 				Str("type", stepType).
+				Str("path", config.Path).
 				Bool("success", false).
 				Int64("elapsed(ms)", stepElapsed).
 				Msg("run step end")

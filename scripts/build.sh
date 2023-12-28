@@ -14,7 +14,7 @@ set -x
 
 # prepare path
 mkdir -p "output"
-bin_path="output/hrp"
+bin_path="output/hrp-p"
 
 # optional build tags: opencv
 tags=$1
