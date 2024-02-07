@@ -646,6 +646,38 @@ func (r *SessionRunner) Start(givenVars map[string]interface{}) error {
 					log.Info().Int("index", i).Msg("start running step in loop")
 					loopIndex = fmt.Sprintf("_loop_%d", i)
 				}
+
+				if step.Struct().Retry != nil {
+					retryTime := step.Struct().Retry.Times
+					retryInterval := step.Struct().Retry.Interval
+
+					startTime := time.Now().Unix()
+
+					for retry := 0; retry <= retryInterval; retry++ {
+						var retryIndex string
+						if retry == 0 {
+							retryIndex = ""
+						} else {
+							retryIndex = fmt.Sprintf("_retry_%d", retry)
+						}
+						// run step
+						indexSuffix := loopIndex + retryIndex
+
+						stepResult, err = step.Run(r)
+
+						stepResult.Name = stepName + indexSuffix
+						stepResult.StartTime = startTime
+
+						// runStep(loopIndex + retryIndex)
+						if err == nil || retry == retryInterval {
+							r.updateSummary(stepResult)
+							break
+						}
+						time.Sleep(time.Duration(retryTime) * time.Second)
+					}
+					continue
+				}
+
 				runStep := func(indexSuffix string) {
 					// run step
 					startTime := time.Now().Unix()
@@ -656,20 +688,6 @@ func (r *SessionRunner) Start(givenVars map[string]interface{}) error {
 				}
 
 				runStep(loopIndex)
-
-				if err != nil && step.Struct().Retry != nil {
-					retryTime := step.Struct().Retry.Times
-					retryInterval := step.Struct().Retry.Interval
-					for retry := 1; retry <= retryInterval; retry++ {
-						retryIndex := fmt.Sprintf("_retry_%d", retry)
-						// run step
-						runStep(loopIndex + retryIndex)
-						if err == nil {
-							break
-						}
-						time.Sleep(time.Duration(retryTime) * time.Second)
-					}
-				}
 			}
 
 			// update extracted variables
