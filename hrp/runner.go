@@ -654,6 +654,16 @@ func (r *SessionRunner) Start(givenVars map[string]interface{}) error {
 					startTime := time.Now().Unix()
 
 					for retry := 0; retry <= retryInterval; retry++ {
+						select {
+						case <-r.caseRunner.hrpRunner.caseTimeoutTimer.C:
+							log.Warn().Msg("timeout in session runner")
+							return errors.Wrap(code.TimeoutError, "session runner timeout")
+						case <-r.caseRunner.hrpRunner.interruptSignal:
+							log.Warn().Msg("interrupted in session runner")
+							return errors.Wrap(code.InterruptError, "session runner interrupted")
+						default:
+						}
+
 						var retryIndex string
 						if retry == 0 {
 							retryIndex = ""
