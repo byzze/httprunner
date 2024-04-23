@@ -68,6 +68,7 @@ func LoadTestCases(iTestCases ...ITestCase) ([]*TestCase, error) {
 	return testCases, nil
 }
 
+// 重构：按路径加载测试脚本，根据文件夹形式分配
 func LoadTestCasesPaths(iTestCases ...ITestCase) ([]string, map[string][]string, error) {
 	var dirMap = make(map[string][]string, 0)
 	var dirList = make([]string, 0)
@@ -117,53 +118,11 @@ func LoadTestCasesPaths(iTestCases ...ITestCase) ([]string, map[string][]string,
 		}
 	}
 
-	/* 	if len(testCases) != 0 {
-	   		testCasesList = append(testCasesList, testCases)
-	   	}
-
-	   	var count = 0
-
-	   	var convertCaseProcess = func(paths []string) ([]*TestCase, error) {
-	   		var cTestCases []*TestCase
-	   		for _, path := range paths {
-	   			count++
-	   			testCasePath := TestCasePath(path)
-	   			tc, err := testCasePath.ToTestCase()
-	   			if err != nil {
-	   				return nil, errors.Wrap(err, "failed to convert TestCasePath to TestCase")
-	   			}
-	   			cTestCases = append(cTestCases, tc)
-	   		}
-	   		return cTestCases, nil
-	   	}
-
-	   	splitDirList, err := splitDirArray(dirList, int(parallelism))
-	   	if err != nil {
-	   		return nil, errors.Wrap(err, "failed to split Dir parts")
-	   	}
-
-	   	for _, dl := range splitDirList {
-	   		var testCasesT []*TestCase
-
-	   		for _, dirName := range dl {
-	   			paths := dirMap[dirName]
-	   			tc, err := convertCaseProcess(paths)
-	   			if err != nil {
-	   				return nil, err
-	   			}
-	   			testCasesT = append(testCasesT, tc...)
-	   		}
-
-	   		testCasesList = append(testCasesList, testCasesT)
-	   	}
-
-	   	log.Info().Int("count", count).Msg("load testcases successfully") */
 	return dirList, dirMap, nil
-
 }
 
+// 重构：分割组织好的文件夹测试脚本，用于协程执行时，平均分配测试任务
 func splitDirList(dirList []string, parts int) [][]string {
-
 	result := make([][]string, parts)
 
 	if parts <= 0 {
@@ -198,6 +157,7 @@ func splitDirList(dirList []string, parts int) [][]string {
 	return result
 }
 
+// 重构：将文件路径转换为测试用例
 func convertCaseProcess(paths []string) ([]*TestCase, error) {
 	var cTestCases []*TestCase
 

@@ -35,7 +35,7 @@ var (
 func initPlugin(path, venv string, logOn bool) (plugin funplugin.IPlugin, err error) {
 	// plugin file not found
 	if path == "" {
-		return nil, errors.New("plugin file not found")
+		return nil, nil
 	}
 	pluginPath, err := locatePlugin(path)
 	if err != nil {

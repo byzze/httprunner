@@ -200,6 +200,7 @@ func (r *HRPRunner) SetParallelism(parallelism int32) *HRPRunner {
 	return r
 }
 
+// 重构：支持并发执行，支持重试参数
 // Run starts to execute one or multiple testcases.
 func (r *HRPRunner) Run(testcases ...ITestCase) (err error) {
 	log.Info().Str("hrp_version", version.VERSION).Msg("start running")
@@ -218,43 +219,44 @@ func (r *HRPRunner) Run(testcases ...ITestCase) (err error) {
 
 	var runErr error
 
-	// load all testcases
-	/* testCasesList, err := LoadTestCases(testcases...)
-	if err != nil {
-		log.Error().Err(err).Msg("failed to load testcases")
-		return err
-	}
-	*/
-
+	var testCasesList = make([][]*TestCase, 0)
 	//========================== support parallelism goroutine
 	// load all testcases
-	dirList, dirMap, err := LoadTestCasesPaths(testcases...)
-	if err != nil {
-		log.Error().Err(err).Msg("failed to load testcases")
-		return err
-	}
-
-	splitDirList := splitDirList(dirList, int(r.parallelism))
-
-	var testCasesList = make([][]*TestCase, 0)
-	var count int
-
-	for _, dl := range splitDirList {
-		var testCasesC []*TestCase
-
-		for _, dirName := range dl {
-			paths := dirMap[dirName]
-			tc, err := convertCaseProcess(paths)
-			if err != nil {
-				return err
-			}
-			testCasesC = append(testCasesC, tc...)
+	if r.parallelism > 1 {
+		dirList, dirMap, err := LoadTestCasesPaths(testcases...)
+		if err != nil {
+			log.Error().Err(err).Msg("failed to load testcases")
+			return err
 		}
-		count += len(testCasesC)
-		testCasesList = append(testCasesList, testCasesC)
-	}
 
-	log.Info().Int("count", count).Msg("load testcases successfully")
+		splitDirList := splitDirList(dirList, int(r.parallelism))
+
+		var count int
+
+		for _, dl := range splitDirList {
+			var testCasesC []*TestCase
+
+			for _, dirName := range dl {
+				paths := dirMap[dirName]
+				tc, err := convertCaseProcess(paths)
+				if err != nil {
+					return err
+				}
+				testCasesC = append(testCasesC, tc...)
+			}
+			count += len(testCasesC)
+			testCasesList = append(testCasesList, testCasesC)
+		}
+		log.Info().Int("count", count).Msg("load testcases successfully")
+	} else {
+		// load all testcases
+		testCases, err := LoadTestCases(testcases...)
+		if err != nil {
+			log.Error().Err(err).Msg("failed to load testcases")
+			return err
+		}
+		testCasesList = append(testCasesList, testCases)
+	}
 
 	var wg sync.WaitGroup
 
@@ -310,7 +312,6 @@ func (r *HRPRunner) Run(testcases ...ITestCase) (err error) {
 		testCasesSummary[idx] = append(testCasesSummary[idx], caseSummaryList...)
 		return nil
 	}
-	//==========================
 
 	// quit all plugins
 	defer func() {
@@ -331,9 +332,10 @@ func (r *HRPRunner) Run(testcases ...ITestCase) (err error) {
 			wg.Done()
 		})
 	}
-
+	// 等待所有 goroutine 执行完毕
 	wg.Wait()
 
+	// 重新组装测试报告，确保顺序和文件夹顺序一致
 	for i := range testCasesSummary {
 		for _, caseSummary := range testCasesSummary[i] {
 			s.appendCaseSummary(caseSummary)
@@ -653,6 +655,7 @@ func (r *SessionRunner) Start(givenVars map[string]interface{}) error {
 
 					startTime := time.Now().Unix()
 
+					// 重构：支持重试逻辑
 					for retry := 0; retry <= retryInterval; retry++ {
 						select {
 						case <-r.caseRunner.hrpRunner.caseTimeoutTimer.C:
