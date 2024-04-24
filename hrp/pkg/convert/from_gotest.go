@@ -5,8 +5,9 @@ import (
 	"os"
 
 	"github.com/httprunner/funplugin/myexec"
-	"github.com/httprunner/httprunner/v4/hrp"
 	"github.com/rs/zerolog/log"
+
+	"github.com/httprunner/httprunner/v4/hrp"
 )
 
 func convert2GoTestScripts(paths ...string) error {
